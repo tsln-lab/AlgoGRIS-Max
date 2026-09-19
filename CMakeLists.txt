@@ -12,6 +12,13 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/source/min-api/script/min-package.cmake)
 
+# Max 9 needs macOS 11, and the external uses std::filesystem (macOS 10.15+).
+# The Min scripts would otherwise set 10.11.
+set(ALGOGRIS_MACOS_TARGET "11.0")
+if (APPLE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "${ALGOGRIS_MACOS_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
+endif ()
+
 # AlgoGRIS checkout to build from. Defaults to a sibling folder.
 set(ALGOGRIS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../AlgoGRIS" CACHE PATH "Path to the AlgoGRIS repository")
 if (NOT EXISTS "${ALGOGRIS_DIR}/sg_AbstractSpatAlgorithm.hpp")

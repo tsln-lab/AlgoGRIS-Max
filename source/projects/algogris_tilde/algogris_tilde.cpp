@@ -153,7 +153,7 @@ public:
             }
             if (args[0].a_type == c74::max::A_SYM) {
                 symbol const command { args[0] };
-                atoms const rest { args.begin() + 1, args.end() };
+                atoms const rest(args.begin() + 1, args.end()); // parentheses: braces would build one atom from the iterators
                 std::string const name { command.c_str() };
                 if (name == "car" || name == "pol" || name == "deg") {
                     return position_message(name, rest);
