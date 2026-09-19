@@ -1,0 +1,19 @@
+{
+	"author" : "Mateo Murphy",
+	"description" : "SpatGRIS spatialization (VBAP, MBAP, hybrid, binaural) in Max, using AlgoGRIS",
+	"homepatcher" : "algogris~.maxhelp",
+	"max_version_min" : "8.0",
+	"name" : "@C74_PACKAGE_NAME@",
+	"os" : {
+		"macintosh" : { "platform" : [ "ia32", "x64", "aarch64" ], "min_version" : "none" },
+		"windows" : { "platform" : [ "x64" ], "min_version" : "none" }
+	},
+	"package_extra" : {
+		"reverse_domain" : "com.mateomurphy",
+		"copyright" : "AlgoGRIS: GRIS / SAT, GPL-3.0-or-later",
+		"add_verinfo" : true
+	},
+	"tags" : [ "spatialization", "audio" ],
+	"version" : "0.1.0",
+	"website" : "https://github.com/GRIS-UdeM/AlgoGRIS"
+}

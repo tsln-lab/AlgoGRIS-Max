@@ -1,0 +1,5 @@
+build/
+externals/
+package-info.json
+support/algogris-data/
+setups/*.xml
