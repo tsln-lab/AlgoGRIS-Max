@@ -26,7 +26,7 @@ jobs:
         include:
           - name: Windows
             os: windows-2025
-            configure: -G "Visual Studio 17 2022" -A x64
+            configure: -A x64 # newest Visual Studio on the runner
           - name: macOS
             os: macos-15
             configure: -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"

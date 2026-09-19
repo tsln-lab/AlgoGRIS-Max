@@ -16,7 +16,9 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/source/min-api/script/min-package.cmake)
 # The Min scripts would otherwise set 10.11.
 set(ALGOGRIS_MACOS_TARGET "11.0")
 if (APPLE)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "${ALGOGRIS_MACOS_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
+    # A normal variable, not a cache entry: the Min scripts later force the cache entry to
+    # 10.11, and a normal variable here takes precedence in every subdirectory.
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "${ALGOGRIS_MACOS_TARGET}")
 endif ()
 
 # AlgoGRIS checkout to build from. Defaults to a sibling folder.
