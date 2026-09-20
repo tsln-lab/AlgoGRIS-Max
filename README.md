@@ -82,7 +82,21 @@ Any object can read it — `dict.view` to inspect it, `js` or `jsui` to draw the
 
 ## Speaker setups
 
-`setups/` holds the setups that ship with the package. `Dome_default_speaker_setup.xml` and `Cube_default_speaker_setup.xml` are copied from AlgoGRIS when you configure the build; `Cube_7.1.4_speaker_setup.xml` is part of this repo.
+`setups/` holds the setups that ship with the package. `Dome_default_speaker_setup.xml` and `Cube_default_speaker_setup.xml` are copied from AlgoGRIS when you configure the build; the two 7.1.4 setups are part of this repo.
+
+### The two 7.1.4 setups
+
+Both give the same 12 output channels in Dolby's order, and differ only in how sources are positioned:
+
+| | `Cube_7.1.4_speaker_setup.xml` | `Dome_7.1.4_speaker_setup.xml` |
+|---|---|---|
+| Algorithm | MBAP | VBAP |
+| Speakers | On a room box | On the unit sphere, at 7.1.4's angles |
+| Sources | Room coordinates, inside or outside the speakers | Directions only; radius is ignored |
+| Like | Atmos tools, room-centric | Classic surround panning around a sweet spot |
+| Use when | You think in room positions, or move sources past the walls | You think in angles, or want VBAP's sharper phantom images |
+
+Dome speaker angles: L/R at ±30°, C at 0°, sides at ±90°, rears at ±135°, and the four height speakers at ±45° and ±135° azimuth, 45° up. Nothing sits directly overhead, so a source straight up is shared by the four top speakers.
 
 ### Cube_7.1.4_speaker_setup.xml
 

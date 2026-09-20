@@ -144,6 +144,45 @@ int main(int argc, char ** argv)
         check(lfeWorst == 0.0, "LFE (patch 4, direct out) stays silent");
     }
 
+    std::puts("7.1.4 (dome, vbap)");
+    {
+        Engine engine{};
+        settings.setupPath = package + "/setups/Dome_7.1.4_speaker_setup.xml";
+        auto const status{ engine.configure(settings) };
+        check(status.ok && status.algorithm == "vbap" && status.numOutputs == 12 && status.numSpeakers == 11,
+              "configure: " + (status.ok ? status.algorithm + ", " + std::to_string(status.numSpeakers)
+                                               + " speakers, " + std::to_string(status.numOutputs) + " outputs"
+                                         : status.message));
+        // A source pointed at a speaker should come out of that speaker alone.
+        struct Direction { float azimuth, elevation; int patch; char const* name; };
+        Direction const directions[] {
+            { -30, 0, 1, "L" },   { 30, 0, 2, "R" },    { 0, 0, 3, "C" },
+            { -90, 0, 5, "Lss" }, { 90, 0, 6, "Rss" },
+            { -135, 0, 7, "Lrs" },{ 135, 0, 8, "Rrs" },
+            { -45, 45, 9, "Ltf" },{ 45, 45, 10, "Rtf" },
+            { -135, 45, 11, "Ltr" }, { 135, 45, 12, "Rtr" },
+        };
+        bool allCorrect { true };
+        for (auto const& d : directions) {
+            engine.deg(1, d.azimuth, d.elevation, 1.0f, 0.0f, 0.0f);
+            auto const rms { render(engine, 4, status.numOutputs, 256, 8) };
+            int const got { loudest(rms) + 1 };
+            if (got != d.patch) {
+                std::printf("       %s: expected patch %d, loudest was %d\n", d.name, d.patch, got);
+                allCorrect = false;
+            }
+        }
+        check(allCorrect, "each of the 11 speakers is loudest for a source in its direction");
+        // Straight up: nothing is directly overhead, so the four top speakers share it.
+        engine.deg(1, 0.0f, 90.0f, 1.0f, 0.0f, 0.0f);
+        auto const zenith { render(engine, 4, status.numOutputs, 256, 8) };
+        double topEnergy {}, otherEnergy {};
+        for (int c = 0; c < status.numOutputs; ++c) {
+            (c >= 8 ? topEnergy : otherEnergy) += zenith[c] * zenith[c];
+        }
+        check(topEnergy > 0.001 && topEnergy > 10 * otherEnergy, "a source overhead uses the top speakers");
+    }
+
     std::puts("binaural monitor of the speaker feeds");
     {
         Engine engine{};
