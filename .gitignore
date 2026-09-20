@@ -3,3 +3,4 @@ externals/
 package-info.json
 support/algogris-data/
 setups/*.xml
+!setups/Cube_7.1.4_speaker_setup.xml

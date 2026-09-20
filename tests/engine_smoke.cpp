@@ -108,6 +108,42 @@ int main(int argc, char ** argv)
         check(!engine.car(5, 0, 0, 0, 0, 0), "out-of-range source index rejected");
     }
 
+    std::puts("7.1.4 (cube)");
+    {
+        Engine engine{};
+        settings.setupPath = package + "/setups/Cube_7.1.4_speaker_setup.xml";
+        auto const status{ engine.configure(settings) };
+        check(status.ok && status.numOutputs == 12 && status.numSpeakers == 11,
+              "configure: " + (status.ok ? status.algorithm + ", " + std::to_string(status.numSpeakers)
+                                               + " speakers (LFE excluded), " + std::to_string(status.numOutputs)
+                                               + " outputs"
+                                         : status.message));
+        // A source at a speaker's own position should come out loudest on that speaker's patch.
+        struct Placement { float x, y, z; int patch; char const* name; };
+        constexpr float E { 0.76f }, CEIL { 0.85f };
+        Placement const placements[] {
+            { -E,  E, 0.0f,   1, "L" },   {  E,  E, 0.0f,   2, "R" },   { 0.0f, E, 0.0f, 3, "C" },
+            { -E, 0.0f, 0.0f, 5, "Lss" }, {  E, 0.0f, 0.0f, 6, "Rss" },
+            { -E, -E, 0.0f,   7, "Lrs" }, {  E, -E, 0.0f,   8, "Rrs" },
+            { -E,  E, CEIL,   9, "Ltf" }, {  E,  E, CEIL,  10, "Rtf" },
+            { -E, -E, CEIL,  11, "Ltr" }, {  E, -E, CEIL,  12, "Rtr" },
+        };
+        bool allCorrect { true };
+        double lfeWorst {};
+        for (auto const& p : placements) {
+            engine.car(1, p.x, p.y, p.z, 0.0f, 0.0f);
+            auto const rms { render(engine, 4, status.numOutputs, 256, 8) };
+            int const got { loudest(rms) + 1 };
+            lfeWorst = std::max(lfeWorst, rms[3]);
+            if (got != p.patch) {
+                std::printf("       %s: expected patch %d, loudest was %d\n", p.name, p.patch, got);
+                allCorrect = false;
+            }
+        }
+        check(allCorrect, "each of the 11 speakers is loudest for a source at its own position");
+        check(lfeWorst == 0.0, "LFE (patch 4, direct out) stays silent");
+    }
+
     std::puts("binaural");
     {
         Engine engine{};

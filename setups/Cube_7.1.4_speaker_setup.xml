@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<SPEAKER_SETUP VERSION="3.1.14" SPAT_MODE="Cube" DIFFUSION="0.0" GENERAL_MUTE="0">
+  <!-- 1: L   front left -->
+  <SPEAKER_1 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="-0.76" Y="0.76" Z="0.0"/>
+  </SPEAKER_1>
+  <!-- 2: R   front right -->
+  <SPEAKER_2 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="0.76" Y="0.76" Z="0.0"/>
+  </SPEAKER_2>
+  <!-- 3: C   centre -->
+  <SPEAKER_3 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="0.0" Y="0.76" Z="0.0"/>
+  </SPEAKER_3>
+  <!-- 4: LFE (direct out) -->
+  <SPEAKER_4 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="1">
+    <POSITION X="0.0" Y="0.76" Z="0.0"/>
+  </SPEAKER_4>
+  <!-- 5: Lss side left -->
+  <SPEAKER_5 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="-0.76" Y="0.0" Z="0.0"/>
+  </SPEAKER_5>
+  <!-- 6: Rss side right -->
+  <SPEAKER_6 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="0.76" Y="0.0" Z="0.0"/>
+  </SPEAKER_6>
+  <!-- 7: Lrs rear left -->
+  <SPEAKER_7 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="-0.76" Y="-0.76" Z="0.0"/>
+  </SPEAKER_7>
+  <!-- 8: Rrs rear right -->
+  <SPEAKER_8 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="0.76" Y="-0.76" Z="0.0"/>
+  </SPEAKER_8>
+  <!-- 9: Ltf top front left -->
+  <SPEAKER_9 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="-0.76" Y="0.76" Z="0.85"/>
+  </SPEAKER_9>
+  <!-- 10: Rtf top front right -->
+  <SPEAKER_10 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="0.76" Y="0.76" Z="0.85"/>
+  </SPEAKER_10>
+  <!-- 11: Ltr top rear left -->
+  <SPEAKER_11 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="-0.76" Y="-0.76" Z="0.85"/>
+  </SPEAKER_11>
+  <!-- 12: Rtr top rear right -->
+  <SPEAKER_12 STATE="normal" GAIN="0.0" DIRECT_OUT_ONLY="0">
+    <POSITION X="0.76" Y="-0.76" Z="0.85"/>
+  </SPEAKER_12>
+</SPEAKER_SETUP>

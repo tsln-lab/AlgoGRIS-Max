@@ -54,6 +54,29 @@ Changing an attribute rebuilds the renderer on the main thread; source positions
 
 Speaker gains and high-pass filters from the setup file are applied, as in SpatGRIS. Not supported: direct outs, solo/mute from project files, pink noise, and SpatGRIS's newer SOFA-based binaural (this builds the AlgoGRIS `main` branch, which uses the KEMAR set).
 
+## Speaker setups
+
+`setups/` holds the setups that ship with the package. `Dome_default_speaker_setup.xml` and `Cube_default_speaker_setup.xml` are copied from AlgoGRIS when you configure the build; `Cube_7.1.4_speaker_setup.xml` is part of this repo.
+
+### Cube_7.1.4_speaker_setup.xml
+
+A 7.1.4 room, in Dolby's channel order, so output channel *n* is the usual 7.1.4 channel *n*:
+
+| Patch | Channel | Position (x right, y front, z up) |
+|---|---|---|
+| 1, 2 | L, R | front corners, ±0.76, 0.76, 0 |
+| 3 | C | front centre |
+| 4 | LFE | **direct out**: nothing is panned to it, and it stays silent (no bass management) |
+| 5, 6 | Lss, Rss | side walls, ±0.76, 0, 0 |
+| 7, 8 | Lrs, Rrs | rear corners |
+| 9–12 | Ltf, Rtf, Ltr, Rtr | ceiling, z = 0.85 |
+
+It's a Cube (MBAP) setup, so positions are room coordinates like the ones Atmos tools use, rather than angles around a sweet spot. The speakers sit where ITU-R BS.2127 places them for layout 4+7+0.
+
+`DIFFUSION="0.0"` in the file makes panning as focused as MBAP allows: a source at a speaker's position is effectively that speaker alone, and one halfway between two speakers splits between them. Edit that value towards 1.0 for a wider, more diffuse spread.
+
+**It is not a Dolby Atmos renderer.** MBAP weights every speaker by distance, so, for example, a source at the centre of the room comes from C and the two sides rather than from all speakers. Atmos's own panner interpolates separately along each axis. See `../dsp-research/mbap-max-msp.md`.
+
 ## Building
 
 Needs CMake ≥ 3.30 and, on Windows, Visual Studio 2022 (C++ workload); on macOS, Xcode. AlgoGRIS is expected next to this folder (`../AlgoGRIS`, with its submodules checked out); set `-DALGOGRIS_DIR=` otherwise.
