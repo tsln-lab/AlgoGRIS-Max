@@ -23,8 +23,9 @@ public:
     MIN_RELATED     { "mc.pack~, mc.unpack~, udpreceive" };
 
     inlet<>  m_inlet  { this, "(multichannelsignal) one channel per source; source messages (car, pol, deg, clr, alg, list)" };
-    outlet<> m_output { this, "(multichannelsignal) one channel per speaker output patch, or stereo", "multichannelsignal" };
-    outlet<> m_status { this, "(list) status: outputs, speakers, algorithm; error messages" };
+    outlet<> m_output  { this, "(multichannelsignal) one channel per speaker output patch, or stereo", "multichannelsignal" };
+    outlet<> m_monitor { this, "(multichannelsignal) binaural monitor of the speaker feeds, 2 channels", "multichannelsignal" };
+    outlet<> m_status  { this, "(list) status: outputs, speakers, algorithm; error messages" };
 
     // Attributes. Every change rebuilds the renderer; source positions are kept.
 
@@ -61,6 +62,18 @@ public:
 
     attribute<number> gain { this, "gain", 0.0,
         description { "Master gain in dB." },
+        setter { MIN_FUNCTION { request_rebuild(); return args; } }
+    };
+
+    attribute<bool> monitor { this, "monitor", false,
+        description { "Render a binaural monitor of the speaker feeds on the second outlet: each speaker is "
+                      "convolved with the KEMAR response for its direction. Works with any speaker layout." },
+        setter { MIN_FUNCTION { request_rebuild(); return args; } }
+    };
+
+    attribute<symbol> layout { this, "layout", "",
+        description { "Name of a Max dictionary to publish the speaker layout into: parallel arrays of patch, "
+                      "x, y, z, azimuth, elevation, distance, directout, gain and highpass. Updated on every rebuild." },
         setter { MIN_FUNCTION { request_rebuild(); return args; } }
     };
 
@@ -190,8 +203,13 @@ public:
     };
 
     void operator()(audio_bundle input, audio_bundle output) {
+        // Max hands us every output channel in one array, outlet by outlet: the speaker
+        // feeds first, then the monitor's two channels.
+        auto const speaker_channels { std::min<long>(m_num_outputs.load(), output.channel_count()) };
+        auto const monitor_channels { output.channel_count() - speaker_channels };
         m_engine.process(input.samples(), static_cast<int>(input.channel_count()),
-                         output.samples(), static_cast<int>(output.channel_count()),
+                         output.samples(), static_cast<int>(speaker_channels),
+                         output.samples() + speaker_channels, static_cast<int>(monitor_channels),
                          static_cast<int>(input.frame_count()));
     }
 
@@ -208,7 +226,10 @@ public:
 
     static long multichanneloutputs(c74::max::t_object* x, long const outlet_index) {
         auto* self = reinterpret_cast<minwrap<algogris>*>(x);
-        return outlet_index == 0 ? std::max(1, self->m_min_object.m_num_outputs.load()) : 0;
+        if (outlet_index == 0) {
+            return std::max(1, self->m_min_object.m_num_outputs.load());
+        }
+        return outlet_index == 1 ? 2 : 0; // the binaural monitor, silent when it is off
     }
 
     algogris(atoms const& args = {}) {
@@ -218,6 +239,7 @@ public:
 private:
     algogris_max::Engine m_engine;
     std::atomic<int> m_num_outputs { 0 };
+    std::unique_ptr<dict> m_layout_dict;
     double m_sample_rate { c74::max::sys_getsr() };
     int m_vector_size { c74::max::sys_getblksize() };
 
@@ -300,6 +322,44 @@ private:
         return slash == std::string::npos ? std::string{} : dir.substr(0, slash);
     }
 
+    /// Writes the speaker layout into the dictionary named by the "layout" attribute.
+    void publish_layout() {
+        symbol const name { layout.get() };
+        if (std::string { name.c_str() }.empty()) {
+            return;
+        }
+        if (!m_layout_dict || m_layout_dict->name() != name) {
+            m_layout_dict = std::make_unique<dict>(name);
+        }
+        auto* d { reinterpret_cast<c74::max::t_dictionary*>(static_cast<c74::max::t_object*>(*m_layout_dict)) };
+        c74::max::dictionary_clear(d);
+
+        auto const speakers { m_engine.layout() };
+        auto append = [d](char const* key, atoms const& values) {
+            if (!values.empty()) {
+                c74::max::dictionary_appendatoms(d, c74::max::gensym(key), static_cast<long>(values.size()),
+                                                 const_cast<c74::max::t_atom*>(static_cast<c74::max::t_atom const*>(&values[0])));
+            }
+        };
+        atoms patch, x, y, z, azimuth, elevation, distance, directout, spk_gain, highpass;
+        for (auto const& s : speakers) {
+            patch.push_back(s.patch);
+            x.push_back(s.x);         y.push_back(s.y);                 z.push_back(s.z);
+            azimuth.push_back(s.azimuth); elevation.push_back(s.elevation); distance.push_back(s.distance);
+            directout.push_back(s.directOut ? 1 : 0);
+            spk_gain.push_back(s.gainDb);
+            highpass.push_back(s.highpassHz);
+        }
+        append("patch", patch);
+        append("x", x);            append("y", y);                  append("z", z);
+        append("azimuth", azimuth); append("elevation", elevation);  append("distance", distance);
+        append("directout", directout);
+        append("gain", spk_gain);
+        append("highpass", highpass);
+        c74::max::dictionary_appendlong(d, c74::max::gensym("speakers"), static_cast<long>(speakers.size()));
+        m_layout_dict->touch();
+    }
+
     void configure(bool const from_dsp) {
         std::string const setup_path { resolve_setup() };
         if (setup_path.empty()) {
@@ -327,6 +387,7 @@ private:
         settings.interpolation = static_cast<float>(static_cast<double>(interpolation));
         settings.masterGainDb = static_cast<float>(static_cast<double>(gain));
         settings.multicore = multicore;
+        settings.monitor = monitor;
         settings.distanceAttenuation = attenuation;
         settings.attenuationDb = static_cast<float>(static_cast<double>(attenuation_db));
         settings.attenuationHz = static_cast<float>(static_cast<double>(attenuation_freq));
@@ -338,8 +399,11 @@ private:
             return;
         }
 
+        publish_layout();
+
         int const previous { m_num_outputs.exchange(status.numOutputs) };
-        m_status.send("outputs", status.numOutputs, "speakers", status.numSpeakers, "algorithm", status.algorithm);
+        m_status.send("outputs", status.numOutputs, "speakers", status.numSpeakers, "algorithm", status.algorithm,
+                      "monitor", status.monitor ? 1 : 0);
         if (previous != status.numOutputs) {
             // The output channel count changed, so the signal chain must be rebuilt. During a
             // compile (dspsetup) that has to wait until the compile is over.

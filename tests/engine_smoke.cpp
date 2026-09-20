@@ -34,7 +34,7 @@ std::vector<double> render(Engine & engine, int const numIn, int const numOut, i
         for (int i{}; i < blockSize; ++i, ++phase) {
             in[0][i] = 0.5 * std::sin(2.0 * M_PI * 1000.0 * phase / 48000.0);
         }
-        engine.process(inPtrs.data(), numIn, outPtrs.data(), numOut, blockSize);
+        engine.process(inPtrs.data(), numIn, outPtrs.data(), numOut, nullptr, 0, blockSize);
         if (b < blocks / 2) continue; // let gain ramps settle
         for (int c{}; c < numOut; ++c)
             for (double s : out[c]) sumSquares[c] += s * s;
@@ -142,6 +142,49 @@ int main(int argc, char ** argv)
         }
         check(allCorrect, "each of the 11 speakers is loudest for a source at its own position");
         check(lfeWorst == 0.0, "LFE (patch 4, direct out) stays silent");
+    }
+
+    std::puts("binaural monitor of the speaker feeds");
+    {
+        Engine engine{};
+        settings.setupPath = package + "/setups/Cube_7.1.4_speaker_setup.xml";
+        settings.monitor = true;
+        auto const status{ engine.configure(settings) };
+        check(status.ok && status.monitor, "configure: " + (status.ok ? "monitor running" : status.message));
+
+        // Render both the speaker feeds and the monitor, and compare the ears.
+        auto measure = [&](float x, float y, float z) {
+            std::vector<std::vector<double>> in(4, std::vector<double>(256));
+            std::vector<std::vector<double>> out(status.numOutputs, std::vector<double>(256));
+            std::vector<std::vector<double>> mon(2, std::vector<double>(256));
+            std::vector<double const*> inPtrs{};
+            std::vector<double*> outPtrs{}, monPtrs{};
+            for (auto& c : in) inPtrs.push_back(c.data());
+            for (auto& c : out) outPtrs.push_back(c.data());
+            for (auto& c : mon) monPtrs.push_back(c.data());
+            engine.car(1, x, y, z, 0.0f, 0.0f);
+            double sum[2] { 0, 0 };
+            long phase = 0;
+            for (int b = 0; b < 16; ++b) {
+                for (int i = 0; i < 256; ++i, ++phase)
+                    in[0][i] = 0.5 * std::sin(2.0 * M_PI * 1000.0 * phase / 48000.0);
+                engine.process(inPtrs.data(), 4, outPtrs.data(), status.numOutputs, monPtrs.data(), 2, 256);
+                if (b < 8) continue;
+                for (int c = 0; c < 2; ++c)
+                    for (double v : mon[c]) sum[c] += v * v;
+            }
+            return std::pair<double, double>{ std::sqrt(sum[0] / (256 * 8)), std::sqrt(sum[1] / (256 * 8)) };
+        };
+
+        auto const [leftL, leftR] { measure(-0.76f, 0.0f, 0.0f) };  // source at the left speaker
+        auto const [rightL, rightR] { measure(0.76f, 0.0f, 0.0f) }; // at the right speaker
+        char buffer[200];
+        std::snprintf(buffer, sizeof buffer,
+                      "left speaker louder in L (%.3f vs %.3f), right speaker louder in R (%.3f vs %.3f)",
+                      leftL, leftR, rightR, rightL);
+        check(leftL > 1.5 * leftR && rightR > 1.5 * rightL, buffer);
+        check(leftL > 0.01 && rightR > 0.01, "monitor produces signal");
+        settings.monitor = false;
     }
 
     std::puts("binaural");

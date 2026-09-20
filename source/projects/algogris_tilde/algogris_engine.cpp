@@ -8,6 +8,7 @@
 #include "algogris_engine.hpp"
 
 #include <sg_AbstractSpatAlgorithm.hpp>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <Data/sg_LegacyLbapPosition.hpp>
 #include <Data/sg_LogicStrucs.hpp>
 
@@ -15,7 +16,12 @@
 #include <array>
 #include <atomic>
 #include <mutex>
+#include <cmath>
 #include <optional>
+
+#ifdef ALGOGRIS_MONITOR_DEBUG
+    #include <cstdio>
+#endif
 
 #if defined(_WIN32)
     #define WIN32_LEAN_AND_MEAN
@@ -32,6 +38,15 @@ using namespace gris;
 namespace
 {
 //==============================================================================
+/** One speaker binauralised: its head-related impulse response and the tail of its feed. */
+struct MonitorVoice {
+    output_patch_t patch{};
+    std::vector<float> left{};    ///< HRIR for the listener's left ear.
+    std::vector<float> right{};
+    std::vector<float> history{}; ///< Ring buffer of past samples, as long as the HRIR.
+    size_t writeIndex{};
+};
+
 /** Everything the audio thread touches. Built on the main thread, then swapped in whole. */
 struct Renderer {
     SpatGrisData data{};
@@ -47,6 +62,7 @@ struct Renderer {
     int numOutputs{};
     int blockSize{};
     bool stereoOutput{};
+    std::vector<MonitorVoice> monitorVoices{};
 };
 
 //==============================================================================
@@ -93,6 +109,113 @@ std::string spatModeName(SpatMode const mode)
     }
     return "invalid";
 }
+//==============================================================================
+/** Speaker positions and settings, in output patch order (SpeakerInfo's angles are degrees). */
+std::vector<SpeakerInfo> layoutOf(SpeakerSetup const & setup)
+{
+    std::vector<SpeakerInfo> result{};
+    for (auto const & speaker : setup.speakers) {
+        auto const & c{ speaker.value->position.getCartesian() };
+        SpeakerInfo info{};
+        info.patch = speaker.key.get();
+        info.x = c.x;
+        info.y = c.y;
+        info.z = c.z;
+        // Azimuth 0 is the front (+y) and grows clockwise, as in SpatGRIS's deg messages.
+        info.azimuth = juce::radiansToDegrees(std::atan2(c.x, c.y));
+        info.elevation = juce::radiansToDegrees(std::atan2(c.z, std::hypot(c.x, c.y)));
+        info.distance = std::sqrt(c.x * c.x + c.y * c.y + c.z * c.z);
+        info.directOut = speaker.value->isDirectOutOnly;
+        info.gainDb = speaker.value->gain.get();
+        info.highpassHz = speaker.value->highpassData ? speaker.value->highpassData->freq.get() : 0.0f;
+        result.push_back(info);
+    }
+    std::sort(result.begin(), result.end(), [](auto const & a, auto const & b) { return a.patch < b.patch; });
+    return result;
+}
+
+//==============================================================================
+/** The MIT KEMAR file closest to a direction. Files hold azimuths 0..180, the listener's right side. */
+juce::File nearestHrir(juce::File const & hrtfDirectory, float const azimuth, float const elevation)
+{
+    static constexpr std::array<int, 14> ELEVATIONS{ -40, -30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90 };
+    auto const elevationStep{ *std::min_element(ELEVATIONS.begin(), ELEVATIONS.end(), [&](int a, int b) {
+        return std::abs(a - elevation) < std::abs(b - elevation);
+    }) };
+
+    auto const directory{ hrtfDirectory.getChildFile("elev" + juce::String{ elevationStep }) };
+    auto const wanted{ std::abs(azimuth) };
+    juce::File best{};
+    auto bestDistance{ std::numeric_limits<float>::max() };
+    for (auto const & file : directory.findChildFiles(juce::File::findFiles, false, "*.wav")) {
+        auto const name{ file.getFileNameWithoutExtension() }; // H<elev>e<azimuth>a
+        auto const azimuthText{ name.fromFirstOccurrenceOf("e", false, false).dropLastCharacters(1) };
+        auto const distance{ std::abs(azimuthText.getFloatValue() - wanted) };
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = file;
+        }
+    }
+    return best;
+}
+
+//==============================================================================
+/** Loads a KEMAR response for one speaker, resampled to the session rate and swapped for the left side. */
+bool loadMonitorVoice(juce::File const & hrtfDirectory, SpeakerInfo const & speaker, double const sampleRate,
+                      MonitorVoice & voice)
+{
+    auto const file{ nearestHrir(hrtfDirectory, speaker.azimuth, speaker.elevation) };
+    if (!file.existsAsFile()) {
+        return false;
+    }
+
+    juce::AudioFormatManager formats{};
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> const reader{ formats.createReaderFor(file) };
+    if (!reader || reader->numChannels < 2) {
+        return false;
+    }
+
+    juce::AudioBuffer<float> source{ 2, static_cast<int>(reader->lengthInSamples) };
+    reader->read(&source, 0, source.getNumSamples(), 0, true, true);
+
+    // The files are 44.1 kHz; resample if the session runs at another rate. Linear interpolation:
+    // JUCE's interpolators have kernels longer than these 128-sample responses and would smear them away.
+    auto const ratio{ reader->sampleRate / sampleRate };
+    auto const inputLength{ source.getNumSamples() };
+    auto const numSamples{ static_cast<int>(std::ceil(inputLength / ratio)) };
+    juce::AudioBuffer<float> resampled{ 2, numSamples };
+    for (int channel{}; channel < 2; ++channel) {
+        auto const * input{ source.getReadPointer(channel) };
+        auto * output{ resampled.getWritePointer(channel) };
+        for (int i{}; i < numSamples; ++i) {
+            auto const position{ i * ratio };
+            auto const index{ static_cast<int>(position) };
+            auto const fraction{ static_cast<float>(position - index) };
+            auto const a{ index < inputLength ? input[index] : 0.0f };
+            auto const b{ index + 1 < inputLength ? input[index + 1] : 0.0f };
+            output[i] = a + fraction * (b - a);
+        }
+    }
+
+    // Channel 1 is the left ear, channel 2 the right; a speaker on the left is the mirror image.
+    auto const leftChannel{ speaker.azimuth < 0.0f ? 1 : 0 };
+    voice.left.assign(resampled.getReadPointer(leftChannel), resampled.getReadPointer(leftChannel) + numSamples);
+    voice.right.assign(resampled.getReadPointer(1 - leftChannel), resampled.getReadPointer(1 - leftChannel) + numSamples);
+    voice.history.assign(static_cast<size_t>(numSamples), 0.0f);
+#ifdef ALGOGRIS_MONITOR_DEBUG
+    auto peak = [](std::vector<float> const & v) {
+        float m{};
+        for (auto s : v) m = std::max(m, std::abs(s));
+        return m;
+    };
+    std::printf("    voice patch %d az %.1f el %.1f -> %s, %d taps, peak L %.4f R %.4f (source peaks %.4f %.4f)\n",
+                speaker.patch, speaker.azimuth, speaker.elevation, file.getFileName().toRawUTF8(), numSamples,
+                peak(voice.left), peak(voice.right), source.getMagnitude(0, 0, source.getNumSamples()),
+                source.getMagnitude(1, 0, source.getNumSamples()));
+#endif
+    return true;
+}
 } // namespace
 
 //==============================================================================
@@ -103,6 +226,7 @@ struct Engine::Impl {
     SourcesData sources{}; // positions as received, independent of the current renderer
     SpatMode projectSpatMode{ SpatMode::vbap };
     std::atomic<int> numOutputs{};
+    std::vector<SpeakerInfo> speakerLayout{};
 
     //==============================================================================
     SourceData * findSource(int const index)
@@ -298,6 +422,24 @@ Status Engine::configure(Settings const & settings)
     renderer->stereoBuffer.setSize(2, settings.blockSize);
     renderer->stereoBuffer.clear();
 
+    // Binaural monitor: one KEMAR response per panned speaker, convolved with that speaker's feed.
+    impl.speakerLayout = layoutOf(data.speakerSetup);
+    if (settings.monitor && !renderer->stereoOutput) {
+        juce::File const hrtfDirectory{ juce::String::fromUTF8(settings.dataDir.c_str()) };
+        for (auto const & speaker : impl.speakerLayout) {
+            if (speaker.directOut) {
+                continue;
+            }
+            MonitorVoice voice{};
+            voice.patch = output_patch_t{ speaker.patch };
+            if (!loadMonitorVoice(hrtfDirectory.getChildFile("hrtf_compact"), speaker, settings.sampleRate, voice)) {
+                status.message = "could not read the binaural data in " + settings.dataDir;
+                return status;
+            }
+            renderer->monitorVoices.push_back(std::move(voice));
+        }
+    }
+
     renderer->numSources = numSources;
     renderer->blockSize = settings.blockSize;
     renderer->stereoOutput = data.appData.stereoMode.has_value();
@@ -314,6 +456,7 @@ Status Engine::configure(Settings const & settings)
     status.numOutputs = renderer->numOutputs;
     status.numSpeakers = data.speakerSetup.numOfSpatializedSpeakers();
     status.algorithm = spatModeName(spatMode);
+    status.monitor = !renderer->monitorVoices.empty();
 
     // Swap it in. The old renderer is destroyed after the audio lock is released.
     {
@@ -328,6 +471,31 @@ Status Engine::configure(Settings const & settings)
 int Engine::numOutputs() const noexcept
 {
     return mImpl->numOutputs;
+}
+
+//==============================================================================
+std::vector<SpeakerInfo> Engine::layout() const
+{
+    std::lock_guard const lock{ mImpl->controlMutex };
+    return mImpl->speakerLayout;
+}
+
+//==============================================================================
+std::vector<SpeakerInfo> Engine::readLayout(std::string const & setupPath, std::string & error)
+{
+    juce::File const file{ juce::String::fromUTF8(setupPath.c_str()) };
+    if (!file.existsAsFile()) {
+        error = "speaker setup not found: " + setupPath;
+        return {};
+    }
+    auto const xml{ juce::XmlDocument::parse(file) };
+    auto const setup{ xml ? SpeakerSetup::fromXml(*xml) : tl::nullopt };
+    if (!setup) {
+        error = "not a SpatGRIS speaker setup: " + setupPath;
+        return {};
+    }
+    error.clear();
+    return layoutOf(*setup);
 }
 
 //==============================================================================
@@ -437,10 +605,15 @@ void Engine::process(double const * const * in,
                      int const numIn,
                      double * const * out,
                      int const numOut,
+                     double * const * monitor,
+                     int const numMonitor,
                      int const numFrames) noexcept
 {
     for (int channel{}; channel < numOut; ++channel) {
         std::fill_n(out[channel], numFrames, 0.0);
+    }
+    for (int channel{}; channel < numMonitor; ++channel) {
+        std::fill_n(monitor[channel], numFrames, 0.0);
     }
 
     auto & impl{ *mImpl };
@@ -503,6 +676,37 @@ void Engine::process(double const * const * in,
             highpass.process(samples, numFrames, state, r.random);
         }
         std::copy_n(samples, numFrames, out[channel]);
+    }
+
+    if (numMonitor < 2 || r.monitorVoices.empty()) {
+        return;
+    }
+
+    // Binaural monitor: convolve each speaker's feed with its own head-related response.
+    // Direct convolution; the responses are short (128 samples at 44.1 kHz).
+    for (auto & voice : r.monitorVoices) {
+        auto const * feed{ r.speakerBuffer[voice.patch].getReadPointer(0) };
+        auto const taps{ voice.history.size() };
+        auto * history{ voice.history.data() };
+        auto const * leftTaps{ voice.left.data() };
+        auto const * rightTaps{ voice.right.data() };
+        auto index{ voice.writeIndex };
+        for (int i{}; i < numFrames; ++i) {
+            history[index] = feed[i];
+            float left{};
+            float right{};
+            auto tail{ index };
+            for (size_t tap{}; tap < taps; ++tap) {
+                auto const sample{ history[tail] };
+                left += sample * leftTaps[tap];
+                right += sample * rightTaps[tap];
+                tail = tail == 0 ? taps - 1 : tail - 1;
+            }
+            monitor[0][i] += left;
+            monitor[1][i] += right;
+            index = index + 1 == taps ? 0 : index + 1;
+        }
+        voice.writeIndex = index;
     }
 }
 

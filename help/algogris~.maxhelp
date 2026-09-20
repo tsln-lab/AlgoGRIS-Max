@@ -11,9 +11,9 @@
   "classnamespace": "box",
   "rect": [
    100,
-   100,
-   760,
-   640
+   80,
+   860,
+   760
   ],
   "boxes": [
    {
@@ -150,7 +150,7 @@
       380,
       20
      ],
-     "text": "one channel per source: here source 1 = noise, source 2 = sine"
+     "text": "one channel per source: source 1 = noise, source 2 = sine"
     }
    },
    {
@@ -249,7 +249,7 @@
       260,
       20
      ],
-     "text": "front, 45 degrees up, some span"
+     "text": "front, 45 deg up, some span"
     }
    },
    {
@@ -325,7 +325,7 @@
      "numinlets": 1,
      "numoutlets": 1,
      "patching_rect": [
-      480,
+      470,
       200,
       110,
       22
@@ -343,8 +343,8 @@
      "numinlets": 1,
      "numoutlets": 0,
      "patching_rect": [
-      480,
-      225,
+      470,
+      224,
       260,
       34
      ],
@@ -358,9 +358,9 @@
      "numinlets": 1,
      "numoutlets": 1,
      "patching_rect": [
-      480,
-      280,
-      200,
+      470,
+      270,
+      210,
       22
      ],
      "outlettype": [
@@ -376,9 +376,9 @@
      "numinlets": 1,
      "numoutlets": 1,
      "patching_rect": [
-      480,
-      306,
-      200,
+      470,
+      296,
+      210,
       22
      ],
      "outlettype": [
@@ -394,9 +394,9 @@
      "numinlets": 1,
      "numoutlets": 1,
      "patching_rect": [
-      480,
-      332,
-      200,
+      470,
+      322,
+      210,
       22
      ],
      "outlettype": [
@@ -412,9 +412,9 @@
      "numinlets": 1,
      "numoutlets": 1,
      "patching_rect": [
-      480,
-      358,
-      200,
+      470,
+      348,
+      210,
       22
      ],
      "outlettype": [
@@ -425,20 +425,20 @@
    },
    {
     "box": {
-     "id": "a_interp",
+     "id": "a_monitor",
      "maxclass": "attrui",
      "numinlets": 1,
      "numoutlets": 1,
      "patching_rect": [
-      480,
-      384,
-      200,
+      470,
+      374,
+      210,
       22
      ],
      "outlettype": [
       ""
      ],
-     "attr": "interpolation"
+     "attr": "monitor"
     }
    },
    {
@@ -446,15 +446,16 @@
      "id": "obj",
      "maxclass": "newobj",
      "numinlets": 1,
-     "numoutlets": 2,
+     "numoutlets": 3,
      "patching_rect": [
       20,
       420,
-      460,
+      660,
       22
      ],
-     "text": "algogris~ @sources 2",
+     "text": "algogris~ @sources 2 @setup Cube_7.1.4_speaker_setup.xml @monitor 1 @layout algogris_layout",
      "outlettype": [
+      "multichannelsignal",
       "multichannelsignal",
       ""
      ]
@@ -490,7 +491,7 @@
      "patching_rect": [
       20,
       575,
-      60,
+      70,
       22
      ],
      "text": "mc.dac~"
@@ -503,12 +504,63 @@
      "numinlets": 1,
      "numoutlets": 0,
      "patching_rect": [
-      170,
+      165,
       470,
-      300,
+      290,
+      45
+     ],
+     "text": "speaker feeds: channel n = output patch n (12 channels for the 7.1.4 setup). Start with the gain down."
+    }
+   },
+   {
+    "box": {
+     "id": "mgain",
+     "maxclass": "mc.live.gain~",
+     "numinlets": 1,
+     "numoutlets": 5,
+     "patching_rect": [
+      470,
+      470,
+      136,
+      90
+     ],
+     "outlettype": [
+      "multichannelsignal",
+      "",
+      "float",
+      "list",
+      ""
+     ]
+    }
+   },
+   {
+    "box": {
+     "id": "mdac",
+     "maxclass": "newobj",
+     "numinlets": 1,
+     "numoutlets": 0,
+     "patching_rect": [
+      470,
+      575,
+      100,
+      22
+     ],
+     "text": "mc.dac~ 13 14"
+    }
+   },
+   {
+    "box": {
+     "id": "c_mon",
+     "maxclass": "comment",
+     "numinlets": 1,
+     "numoutlets": 0,
+     "patching_rect": [
+      615,
+      470,
+      210,
       60
      ],
-     "text": "speakers: one channel per output patch of the setup (channel n = patch n). binaural / stereo: 2 channels. Start with the gain down."
+     "text": "binaural monitor of those same speaker feeds, 2 channels. Send it to your headphone outputs (13/14 here)."
     }
    },
    {
@@ -518,9 +570,9 @@
      "numinlets": 1,
      "numoutlets": 0,
      "patching_rect": [
-      330,
-      540,
-      100,
+      200,
+      620,
+      110,
       22
      ],
      "text": "print algogris~"
@@ -533,41 +585,45 @@
      "numinlets": 1,
      "numoutlets": 0,
      "patching_rect": [
-      330,
-      565,
-      300,
+      200,
+      645,
+      320,
       20
      ],
-     "text": "status: outputs, speakers, algorithm (or an error)"
+     "text": "status: outputs, speakers, algorithm, monitor (or an error)"
     }
    },
    {
     "box": {
-     "id": "ezdac",
-     "maxclass": "ezdac~",
-     "numinlets": 2,
-     "numoutlets": 0,
+     "id": "dv",
+     "maxclass": "newobj",
+     "numinlets": 1,
+     "numoutlets": 1,
      "patching_rect": [
-      480,
-      470,
-      45,
-      45
+      20,
+      680,
+      170,
+      22
+     ],
+     "text": "dict.view algogris_layout",
+     "outlettype": [
+      ""
      ]
     }
    },
    {
     "box": {
-     "id": "c_dac",
+     "id": "c_dict",
      "maxclass": "comment",
      "numinlets": 1,
      "numoutlets": 0,
      "patching_rect": [
-      530,
-      480,
-      100,
-      20
+      200,
+      680,
+      380,
+      40
      ],
-     "text": "audio on/off"
+     "text": "the speaker layout, published as a dictionary: patch, x/y/z, azimuth, elevation, distance, directout, gain, highpass"
     }
    }
   ],
@@ -755,7 +811,7 @@
    {
     "patchline": {
      "source": [
-      "a_interp",
+      "a_monitor",
       0
      ],
      "destination": [
@@ -793,6 +849,30 @@
      "source": [
       "obj",
       1
+     ],
+     "destination": [
+      "mgain",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "mgain",
+      0
+     ],
+     "destination": [
+      "mdac",
+      0
+     ]
+    }
+   },
+   {
+    "patchline": {
+     "source": [
+      "obj",
+      2
      ],
      "destination": [
       "print",

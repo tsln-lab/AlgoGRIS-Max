@@ -12,9 +12,11 @@ A Max package with one object, `algogris~`, that runs [AlgoGRIS](https://github.
 ```
 [mc.pack~ N]                      one channel per source
  |
-[algogris~ @sources N @setup MySetup.xml]
- |                        \
-[mc.live.gain~] -> [mc.dac~]   [print]   status: outputs, speakers, algorithm
+[algogris~ @sources N @setup MySetup.xml @monitor 1 @layout mylayout]
+ |                  |                 \
+ |                  |                  [print]  status: outputs, speakers, algorithm, monitor
+ |                  [mc.dac~ 13 14]    binaural monitor, 2 channels
+ [mc.live.gain~] -> [mc.dac~]          speaker feeds
 ```
 
 **Output:** channel *n* is the speaker with output patch *n*, so the channel count is the highest output patch in the setup. In `binaural` and `stereo` render modes the output is 2 channels.
@@ -47,12 +49,36 @@ Azimuth: 0 = front, clockwise. Elevation: 0 = horizon. Positions arrive at contr
 | `sources` | 16 | Number of sources, 1–256 |
 | `interpolation` | 0 | Gain smoothing, 0–1 |
 | `gain` | 0 | Master gain, dB |
+| `monitor` | 0 | Binaural monitor of the speaker feeds on the second outlet (see below) |
+| `layout` | none | Name of a dictionary to publish the speaker layout into (see below) |
 | `multicore` | 0 | Parallel VBAP/MBAP |
 | `attenuation`, `attenuation_db`, `attenuation_freq` | 0, 0 dB, 16 kHz | MBAP distance attenuation beyond radius 1 |
 
 Changing an attribute rebuilds the renderer on the main thread; source positions are kept. MBAP setups take a moment to rebuild (the gain matrices are computed then), and audio is silent for a block while the new renderer is swapped in.
 
 Speaker gains and high-pass filters from the setup file are applied, as in SpatGRIS. Not supported: direct outs, solo/mute from project files, pink noise, and SpatGRIS's newer SOFA-based binaural (this builds the AlgoGRIS `main` branch, which uses the KEMAR set).
+
+## Binaural monitor
+
+`@monitor 1` renders a headphone version of **the speaker feeds themselves** on the second outlet: each speaker is convolved with the KEMAR response for its own direction, and the results are summed. It works with any layout, because only each speaker's direction matters.
+
+It is much cheaper than a second object in `binaural` render mode, and it monitors the mix you are actually sending to the room, including per-speaker gains and high-pass. Measured on one core at 48 kHz, 8 sources, with the 7.1.4 setup:
+
+| | CPU |
+|---|---|
+| Speaker feeds only | 1.1 % |
+| Speaker feeds + binaural monitor (11 responses) | **3.7 %** |
+| A second object in `binaural` mode | 92 % |
+
+`binaural` render mode is expensive because it always convolves 16 virtual speakers, and with MBAP every one of them gets signal. The monitor convolves only the speakers you have.
+
+Limits: responses are far-field, so speaker distance is not modelled; the KEMAR set covers elevations from −40° to +90°; and cost grows with speaker count (fine to roughly 30 speakers, too much for 93).
+
+## Speaker layout dictionary
+
+`@layout <name>` publishes the parsed speaker setup into a named Max dictionary, refreshed on every rebuild, as parallel arrays: `patch`, `x`, `y`, `z`, `azimuth`, `elevation`, `distance`, `directout`, `gain`, `highpass`, plus `speakers` (a count). Angles are degrees, azimuth 0 = front and positive clockwise.
+
+Any object can read it — `dict.view` to inspect it, `js` or `jsui` to draw the room, a patch to route test tones by patch number — without a second copy of the setup parser.
 
 ## Speaker setups
 
