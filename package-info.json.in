@@ -14,6 +14,6 @@
 		"add_verinfo" : true
 	},
 	"tags" : [ "spatialization", "audio" ],
-	"version" : "0.1.0",
+	"version" : "@GIT_VERSION_MAJ@.@GIT_VERSION_MIN@.@GIT_VERSION_SUB@",
 	"website" : "https://github.com/GRIS-UdeM/AlgoGRIS"
 }

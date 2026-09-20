@@ -40,6 +40,7 @@ jobs:
         with:
           path: AlgoGRIS-Max
           submodules: recursive
+          fetch-depth: 0 # tags: the package version comes from git describe
 
       - name: Check out AlgoGRIS
         uses: actions/checkout@v7
@@ -79,6 +80,7 @@ jobs:
             AlgoGRIS-Max/support/
             AlgoGRIS-Max/package-info.json
             AlgoGRIS-Max/README.md
+            AlgoGRIS-Max/LICENSE
 
       # tar keeps the .mxo bundle's permissions and code signature intact.
       - name: Archive macOS external
@@ -108,32 +110,72 @@ jobs:
           merge-multiple: true
 
       - name: Assemble the Max package
+        id: package
         run: |
           set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${GITHUB_REF_NAME//\//-}-$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          fi
+          name="AlgoGRIS-Max-${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "zip=${name}.zip" >> "$GITHUB_OUTPUT"
+
           test -f artifacts/package-info.json || { echo "::error::No package files: the Windows build failed."; exit 1; }
           mkdir -p AlgoGRIS-Max/externals
-          mv artifacts/help artifacts/setups artifacts/support artifacts/package-info.json artifacts/README.md AlgoGRIS-Max/
+          mv artifacts/help artifacts/setups artifacts/support \
+             artifacts/package-info.json artifacts/README.md artifacts/LICENSE AlgoGRIS-Max/
+
+          missing=""
           if [ -f "artifacts/algogris~.mxe64" ]; then
             mv "artifacts/algogris~.mxe64" AlgoGRIS-Max/externals/
           else
-            echo "::warning::No Windows external in this package."
+            missing="Windows"
           fi
           if [ -f artifacts/externals-macos.tar.gz ]; then
             tar -xzf artifacts/externals-macos.tar.gz -C AlgoGRIS-Max
           else
-            echo "::warning::No macOS external in this package: the macOS build failed."
+            missing="${missing:+$missing and }macOS"
           fi
+          if [ -n "$missing" ]; then
+            # A release must carry both platforms; other builds may go one-sided.
+            if [ "${GITHUB_REF_TYPE}" = tag ]; then
+              echo "::error::Refusing to release without the $missing external."
+              exit 1
+            fi
+            echo "::warning::No $missing external in this package."
+          fi
+
           find AlgoGRIS-Max/externals -maxdepth 1
-          zip -qry AlgoGRIS-Max.zip AlgoGRIS-Max
+          zip -qry "${name}.zip" AlgoGRIS-Max
+          sha256sum "${name}.zip" > "${name}.zip.sha256"
+          cat "${name}.zip.sha256"
 
       - name: Upload package
         uses: actions/upload-artifact@v7
         with:
-          path: AlgoGRIS-Max.zip
+          path: ${{ steps.package.outputs.zip }}
           archive: false
 
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish the release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
-          files: AlgoGRIS-Max.zip
+          name: AlgoGRIS-Max ${{ steps.package.outputs.version }}
+          files: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.package.outputs.zip }}.sha256
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.package.outputs.version, '-') }}
+          body: |
+            A Max package with `algogris~`, the SpatGRIS spatialization algorithms (VBAP, MBAP, hybrid,
+            binaural) from [AlgoGRIS](https://github.com/GRIS-UdeM/AlgoGRIS), built for Windows and macOS.
+
+            **Install:** unzip `${{ steps.package.outputs.zip }}` into your Max `Packages` folder
+            (`Documents/Max 9/Packages`), then restart Max and open the `algogris~` help patcher.
+
+            **macOS:** the external is signed ad-hoc, not notarized by Apple. After unzipping, run
+            `xattr -dr com.apple.quarantine "<Packages>/AlgoGRIS-Max"` once, or macOS will refuse to load it.
+
+            Built against AlgoGRIS `${{ env.ALGOGRIS_REF }}`. Licensed GPL-3.0-or-later.

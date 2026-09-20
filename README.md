@@ -132,6 +132,13 @@ The external lands in `externals/`. Configuring also copies the binaural data (`
 **From WSL:** use the Windows CMake on this folder and keep the build folder on the Windows disk (outside OneDrive), e.g.
 `cmake.exe -S \\wsl.localhost\Ubuntu\home\<you>\Projects\AlgoGRIS-Max -B %LOCALAPPDATA%\AlgoGRIS-Max\build -G "Visual Studio 17 2022" -A x64`.
 
+### Releases
+
+Pushing a tag like `v0.2.0` builds both platforms and publishes a GitHub release with `AlgoGRIS-Max-0.2.0.zip`, its SHA-256, install notes and generated release notes. A tag containing a hyphen (`v0.2.0-rc.1`) is published as a pre-release. A release fails rather than publishes if either platform's external is missing.
+
+The package version comes from `git describe`, so it matches the tag. Building locally from WSL, Windows git refuses `\\wsl.localhost` paths ("dubious ownership") and the version falls back to 1.0.0; harmless, or run
+`git.exe config --global --add safe.directory '%(prefix)///wsl.localhost/Ubuntu/home/<you>/Projects/AlgoGRIS-Max'`.
+
 ### Testing without Max
 
 `tests/run_engine_smoke.sh` builds the engine (everything except the Max glue) against a Linux or macOS AlgoGRIS build and checks each render mode: speakers, MBAP, legacy messages, binaural left/right, rebuilds.
