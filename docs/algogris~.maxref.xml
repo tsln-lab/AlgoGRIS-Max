@@ -1,0 +1,165 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+
+
+<c74object name='algogris~' category='audio, spatialization'>
+
+	<digest>Spatialize sources with the SpatGRIS algorithms</digest>
+	<description>Spatialize sources with the SpatGRIS algorithms (VBAP, MBAP, hybrid, binaural) from AlgoGRIS. Takes one multichannel signal with a channel per source and outputs one channel per speaker output patch. Reads SpatGRIS speaker setup files and understands SpatGRIS's OSC messages, so ControlGRIS or any patch sending them can drive it.</description>
+
+
+	<!--METADATA-->
+
+	<metadatalist>
+		<metadata name='author'>AlgoGRIS: GRIS (Universite de Montreal) and SAT</metadata>
+		<metadata name='tag'>audio</metadata>
+		<metadata name='tag'>spatialization</metadata>
+	</metadatalist>
+
+
+	<!--ARGUMENTS-->
+
+	<objarglist>
+	</objarglist>
+
+
+	<!--MESSAGES-->
+
+	<methodlist>
+
+		<method name='signal'>
+			<digest>Sources to spatialize, one channel per source</digest>
+			<description>A multichannel signal with one channel per source: channel n feeds source n. Extra channels are ignored, and missing ones are treated as silence.</description>
+		</method>
+
+		<method name='car'>
+			<digest>Move a source, cartesian: index x y z hspan vspan</digest>
+			<description>Position a source in room coordinates: x right, y front, z up, with radius 1 at the speaker boundary. The source index starts at 1. The two spans, 0 to 1, spread the source across more speakers. Same as SpatGRIS's car OSC message.</description>
+		</method>
+
+		<method name='pol'>
+			<digest>Move a source, polar in radians: index azimuth elevation radius hspan vspan</digest>
+			<description>Position a source by direction. Azimuth 0 is the front and grows clockwise; elevation 0 is the horizon. In dome (VBAP) setups the radius is ignored. Same as SpatGRIS's pol OSC message.</description>
+		</method>
+
+		<method name='deg'>
+			<digest>Move a source, polar in degrees: index azimuth elevation radius hspan vspan</digest>
+			<description>As pol, with angles in degrees.</description>
+		</method>
+
+		<method name='clr'>
+			<digest>Clear a source's position: index</digest>
+			<description>Removes the source's position, so it stops sounding until it is given a new one. The index starts at 1.</description>
+		</method>
+
+		<method name='reset'>
+			<digest>Clear a source's position, legacy numbering: id</digest>
+			<description>As clr, but the id starts at 0, matching older ControlGRIS versions.</description>
+		</method>
+
+		<method name='alg'>
+			<digest>Choose a source's algorithm in hybrid mode: index dome|cube</digest>
+			<description>In hybrid mode each source is panned either with VBAP (dome) or MBAP (cube). Ignored in other modes.</description>
+		</method>
+
+		<method name='list'>
+			<digest>Move a source, legacy ControlGRIS format: id azimuth elevation azimuthspan elevationspan distance gain</digest>
+			<description>The message older ControlGRIS versions send: the id starts at 0, angles are radians, elevation is measured from straight up, and the spans use the legacy 0-2 and 0-0.5 ranges. The gain is ignored.</description>
+		</method>
+
+		<method name='/spat/serv'>
+			<digest>A SpatGRIS OSC message as output by udpreceive</digest>
+			<description>Accepts any of the messages above with SpatGRIS's OSC address in front, so [udpreceive 18032] can be connected straight to this object. Colour messages are accepted and ignored.</description>
+		</method>
+
+		<method name='rebuild'>
+			<digest>Reload the speaker setup and rebuild the renderer</digest>
+			<description>Re-reads the setup file from disk. Source positions are kept.</description>
+		</method>
+
+	</methodlist>
+
+
+	<!--ATTRIBUTES-->
+
+	<attributelist>
+
+		<attribute name='setup' get='1' set='1' type='symbol' size='1' >
+			<digest>Speaker setup file</digest>
+			<description>A SpatGRIS speaker setup (.xml), in either the legacy or the current 4.x format: an absolute path, a file in Max's search path, or one of the setups in this package. Defaults to Dome_default_speaker_setup.xml. The package also ships Cube_7.1.4 and Dome_7.1.4 setups.</description>
+		</attribute>
+
+		<attribute name='mode' get='1' set='1' type='symbol' size='1' >
+			<digest>Spatialization algorithm</digest>
+			<description>setup (default) uses whatever the setup file declares, where Dome means VBAP and Cube means MBAP. vbap pans by direction on a sphere; mbap pans by position in a room; hybrid chooses per source with the alg message.</description>
+		</attribute>
+
+		<attribute name='render' get='1' set='1' type='symbol' size='1' >
+			<digest>What the first outlet carries</digest>
+			<description>speakers (default) gives one channel per speaker output patch. binaural gives a 2-channel headphone mix using 16 virtual speakers. stereo gives SpatGRIS's stereo reduction. For headphone monitoring of a speaker mix, prefer the monitor attribute, which is far cheaper.</description>
+		</attribute>
+
+		<attribute name='sources' get='1' set='1' type='long' size='1' >
+			<digest>Number of sources</digest>
+			<description>How many sources to spatialize, 1 to 256. Input channel n feeds source n.</description>
+		</attribute>
+
+		<attribute name='monitor' get='1' set='1' type='long' size='1' >
+			<digest>Binaural monitor of the speaker feeds</digest>
+			<description>When on, the second outlet carries a 2-channel headphone version of the speaker feeds: each speaker is convolved with the KEMAR head response for its own direction. It works with any layout and reflects the speaker gains and high-pass filters of the setup. Costs about 3.7% of a CPU core for a 12-channel layout, against about 92% for a second object in binaural render mode.</description>
+		</attribute>
+
+		<attribute name='layout' get='1' set='1' type='symbol' size='1' >
+			<digest>Dictionary to publish the speaker layout into</digest>
+			<description>Names a Max dictionary that receives the parsed setup on every rebuild, as parallel arrays: patch, x, y, z, azimuth, elevation, distance, directout, gain, highpass, and a speakers count. Angles are degrees, azimuth 0 = front, positive clockwise. Any object can read it, so the layout need not be parsed twice.</description>
+		</attribute>
+
+		<attribute name='interpolation' get='1' set='1' type='float64' size='1' >
+			<digest>Gain smoothing, 0 to 1</digest>
+			<description>0 ramps speaker gains linearly across one signal vector. Higher values glide more slowly, which smooths fast movements at the cost of some lag.</description>
+		</attribute>
+
+		<attribute name='gain' get='1' set='1' type='float64' size='1' >
+			<digest>Master gain in dB</digest>
+			<description>Applied to every output.</description>
+		</attribute>
+
+		<attribute name='multicore' get='1' set='1' type='long' size='1' >
+			<digest>Parallel VBAP and MBAP</digest>
+			<description>Uses AlgoGRIS's multithreaded panners, which can help with many sources and speakers.</description>
+		</attribute>
+
+		<attribute name='attenuation' get='1' set='1' type='long' size='1' >
+			<digest>MBAP distance attenuation</digest>
+			<description>When on, sources beyond radius 1 get quieter and duller, reaching attenuation_db and attenuation_freq at radius 1.667. Only affects MBAP (cube) panning.</description>
+		</attribute>
+
+		<attribute name='attenuation_db' get='1' set='1' type='float64' size='1' >
+			<digest>Level at the far radius, in dB</digest>
+			<description>The gain applied to a source at radius 1.667 when attenuation is on.</description>
+		</attribute>
+
+		<attribute name='attenuation_freq' get='1' set='1' type='float64' size='1' >
+			<digest>Lowpass cutoff at the far radius, in Hz</digest>
+			<description>The cutoff reached at radius 1.667 when attenuation is on. Defaults to 16000.</description>
+		</attribute>
+
+	</attributelist>
+
+
+	<!--DISCUSSION-->
+
+	<discussion>Outlets: the first carries the speaker feeds, where channel n is the speaker with output patch n, so the channel count is the highest output patch in the setup; in binaural and stereo render modes it carries 2 channels instead. The second carries the binaural monitor, 2 channels, when the monitor attribute is on. The third sends status after every rebuild: outputs, speakers, algorithm and monitor, or an error message. Changing any attribute rebuilds the renderer while keeping source positions; MBAP setups take a moment to rebuild and audio is silent for one vector while the new renderer is swapped in.</discussion>
+
+
+	<!--SEEALSO-->
+
+	<seealsolist>
+		<seealso name='mc.pack~' />
+		<seealso name='mc.unpack~' />
+		<seealso name='mc.dac~' />
+		<seealso name='udpreceive' />
+		<seealso name='dict.view' />
+	</seealsolist>
+
+
+</c74object>

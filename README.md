@@ -151,3 +151,4 @@ The package version comes from `git describe`, so it matches the tag. Building l
 | `source/projects/algogris_tilde/algogris_tilde.cpp` | The Min object: attributes, messages, MC output count |
 | `source/min-api` | Min API (submodule) |
 | `help/algogris~.maxhelp` | Help patcher |
+| `docs/algogris~.maxref.xml` | Object reference (right-click the object, Open algogris~ Reference) |

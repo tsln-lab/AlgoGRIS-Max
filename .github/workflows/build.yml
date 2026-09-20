@@ -76,6 +76,7 @@ jobs:
           name: package-files
           path: |
             AlgoGRIS-Max/help/
+            AlgoGRIS-Max/docs/
             AlgoGRIS-Max/setups/
             AlgoGRIS-Max/support/
             AlgoGRIS-Max/package-info.json
@@ -124,7 +125,7 @@ jobs:
 
           test -f artifacts/package-info.json || { echo "::error::No package files: the Windows build failed."; exit 1; }
           mkdir -p AlgoGRIS-Max/externals
-          mv artifacts/help artifacts/setups artifacts/support \
+          mv artifacts/help artifacts/docs artifacts/setups artifacts/support \
              artifacts/package-info.json artifacts/README.md artifacts/LICENSE AlgoGRIS-Max/
 
           missing=""

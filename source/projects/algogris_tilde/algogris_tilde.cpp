@@ -21,6 +21,9 @@ public:
     MIN_TAGS        { "audio, spatialization" };
     MIN_AUTHOR      { "AlgoGRIS: GRIS (Université de Montréal) and SAT" };
     MIN_RELATED     { "mc.pack~, mc.unpack~, udpreceive" };
+    // The reference page in docs/ is written by hand and ships with the package;
+    // without this Min would overwrite it whenever the external is newer.
+    MIN_FLAGS       { documentation_flags::do_not_generate };
 
     inlet<>  m_inlet  { this, "(multichannelsignal) one channel per source; source messages (car, pol, deg, clr, alg, list)" };
     outlet<> m_output  { this, "(multichannelsignal) one channel per speaker output patch, or stereo", "multichannelsignal" };
